@@ -110,6 +110,7 @@ class MasterOperation(object):
         for the continueEvent to be set.
         """
         # Wait until continue event is set:
+        self._logger.info("Waiting for continueEvent to be set...")
         self.continueEvent.wait(self.defaultTimeout)
         if not self.continueEvent.is_set():
             self.result = None
@@ -195,7 +196,6 @@ class JobControlTemplate(object):
             self.keepRunning.clear()
             raise RuntimeError("Attempted to start continuous cycling while still running.")
 
-        self.keepRunning.set()
         self.cyclerThreadHandle = sThread(target=self.cycler.startContinuous,
                                           name="ContinuousCycler",
                                           daemon=True)
@@ -223,8 +223,6 @@ class JobControlTemplate(object):
         """
         Call the 'debugAction' method.
         """
-        if self.keepRunning.is_set():
-            raise RuntimeError("Attempted to call debugAction while running.")
         self.cycler.debugAction(inputArguments)
 
     def setCurrentPallet(self, palletName):
