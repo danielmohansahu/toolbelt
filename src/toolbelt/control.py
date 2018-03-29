@@ -260,8 +260,8 @@ class JobControlTemplate(object):
 
             # If we come across a module assume it's a job or jobset:
             if len(pkgname_split) != 3:
-                self._logger.warning("Found a module in jobCollections with an \
-                                     invalid path length. Ignoring " + str(pkgname_split[-1]))
+                self._logger.warning("Found a module in jobCollections with an "
+                                     + "invalid path length. Ignoring " + str(pkgname_split[-1]))
                 continue
 
             # It's a jobSet (i.e. subpackage)
