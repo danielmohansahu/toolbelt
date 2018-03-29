@@ -46,14 +46,13 @@ def TryExceptDecorator(originalMethod):
     to sys.excepthook. This is mostly designed to work with threads which don't
     natively pass Exceptions that way.
     """
-    _logger = sLogger("TryExceptDecorator")
     def wrap(*args, **kwargs):
         try:
             return originalMethod(*args, **kwargs)
         except (KeyboardInterrupt, SystemExit):
             raise
         except:
-            _logger.error("Caught and raised exception in " + str(originalMethod.__qualname__))
+            print("Error caught in try/except decorator.")
             sys.excepthook(*sys.exc_info())
     return wrap
 

@@ -13,6 +13,21 @@ import os
 import logging
 import rospy
 
+class SoftwearExceptionHandler(object):
+    """
+    ExceptHook override; intended to be used in conjunction with a TryExceptDecorator
+    """
+    def __init__(self):
+        self._logger = SoftwearLogger("ExceptionHandler")
+        self._logger.debug("Initialization")
+
+    def softwearExceptHook(exceptionType, exceptionValue, traceback):
+        """
+        @TODO Log the exception here and then choose what to do based on the exception type.
+        """
+        self._logger.error(exceptionType + ": " + exceptionValue)
+        print(tracback.print_tb())
+
 class SoftwearLogger(object):
     """
     Logging configuration for use in all projects. Basically a wrapper
@@ -187,8 +202,5 @@ class AWSInterface(object):
 
 if __name__ == "__main__":
     import code
-
-    logger = SoftwearLogger("TEST")
-    logger.debug("Huh")
 
     code.interact(local=locals())
