@@ -8,15 +8,15 @@
 
 import time
 import copy
+import threading
 
 # Try to import from relative path; if we're calling as main import
 if __package__:
     from .misc import SoftwearLogger as sLogger
-    from .misc import SoftwearThread as sThread
+    from .decorators import TryExceptDecorator
 else:
     from misc import SoftwearLogger as sLogger
-    from misc import SoftwearThread as sThread
-
+    from decorators import TryExceptDecorator
 
 class SystemMonitor(object):
     """
@@ -97,6 +97,7 @@ class SystemMonitor(object):
 
     ########################## PRIVATE METHODS ################################
 
+    @TryExceptDecorator
     def _checkThread(self):
         """
         Internal Method to check all input topics

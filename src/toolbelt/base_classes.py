@@ -12,13 +12,11 @@ import copy
 
 # Try to import from relative path; if we're calling as main import
 if __package__:
-    from .misc import SoftwearThread as sThread
     from .misc import SoftwearLogger as sLogger
-    from .decorators import LoggingDecorator
+    from .decorators import LoggingDecorator, TryExceptDecorator
 else:
-    from misc import SoftwearThread as sThread
     from misc import SoftwearLogger as sLogger
-    from decorators import LoggingDecorator
+    from decorators import LoggingDecorator, TryExceptDecorator
 
 # Default States defined for Actuator below:
 class DefaultStateDict(object):
@@ -374,7 +372,7 @@ class BaseActuator(object):
 
         # If not blocking spin off thread:
         if not blocking:
-            self._t = sThread(target=self._go_to_state,
+            self._t = threading.Thread(target=self._go_to_state,
                               args=(desired_state, input_args, delay,),
                               name=self.name + "_go_to_state_" + desired_state,
                               daemon=True)
@@ -490,6 +488,7 @@ class BaseActuator(object):
             self._logger.error("Tried to set current state to unreal state.")
             raise ValueError("Tried to set current state to unreal state.")
 
+    @TryExceptDecorator
     def _go_to_state(self, desired_state, input_args=(), delay=0.0):
         # Internal go to state function; return True if successful, false if otherwise.
 

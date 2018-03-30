@@ -16,17 +16,29 @@ import rospy
 class SoftwearExceptionHandler(object):
     """
     ExceptHook override; intended to be used in conjunction with a TryExceptDecorator
+
+    Hopefully we don't cause any infinite loops here...
     """
-    def __init__(self):
+    def __init__(self, shutdown):
         self._logger = SoftwearLogger("ExceptionHandler")
         self._logger.debug("Initialization")
 
-    def softwearExceptHook(exceptionType, exceptionValue, traceback):
+        self.shutdown = shutdown
+
+    def softwearExceptHook(self, exceptionType, exceptionValue, traceback):
         """
         @TODO Log the exception here and then choose what to do based on the exception type.
         """
         self._logger.error(exceptionType + ": " + exceptionValue)
         print(tracback.print_tb())
+
+        if isinstance(exceptionType, Exception):
+            self._handle_general(exceptionValue, traceback)
+
+    def _handle_general(self):
+        self.shutdown()
+
+
 
 class SoftwearLogger(object):
     """

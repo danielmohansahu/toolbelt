@@ -15,10 +15,10 @@ from collections import defaultdict
 # Try to import from relative path; if we're calling as main import
 if __package__:
     from .misc import SoftwearLogger as sLogger
-    from .misc import SoftwearThread as sThread
+    from .decorators import TryExceptDecorator
 else:
     from misc import SoftwearLogger as sLogger
-    from misc import SoftwearThread as sThread
+    from decorators import TryExceptDecorator
 
 ############################ JOBCONTROL STUFF ##################################
 
@@ -62,7 +62,7 @@ class SingleOperation(object):
             if self.blocking:
                 return operationToRun(*inputArguments)
             else:
-                t = sThread(target=operationToRun,
+                t = threading.Thread(target=operationToRun,
                             args=inputArguments,
                             name=self.operation,
                             daemon=True)
@@ -107,6 +107,7 @@ class MasterOperation(object):
         """
         return self.continueEvent
 
+    @TryExceptDecorator
     def _preloadNextOperation(self):
         """
         Internal method that handles calling the next operation and waiting
@@ -144,7 +145,7 @@ class MasterOperation(object):
 
             # Spin off thread that waits until an event is set before getting
             # the next object to run:
-            t = sThread(target=self._preloadNextOperation,
+            t = threading.Thread(target=self._preloadNextOperation,
                         name="preloadNextOperation",
                         daemon=True)
             t.start()
@@ -199,7 +200,7 @@ class JobControlTemplate(object):
             self.keepRunning.clear()
             raise RuntimeError("Attempted to start continuous cycling while still running.")
 
-        self.cyclerThreadHandle = sThread(target=self.cycler.startContinuous,
+        self.cyclerThreadHandle = threading.Thread(target=self.cycler.startContinuous,
                                           name="ContinuousCycler",
                                           daemon=True)
         self.cyclerThreadHandle.start()
