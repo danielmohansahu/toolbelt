@@ -8,9 +8,9 @@
 
 # Try to import from relative path; if we're calling as main import
 if __package__:
-    from .misc import SoftwearLogger as sLogger
+    from .logger import SoftwearLogger as sLogger
 else:
-    from misc import SoftwearLogger as sLogger
+    from logger import SoftwearLogger as sLogger
 
 class PalletTemplate(object):
     """

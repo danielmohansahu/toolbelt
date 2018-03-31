@@ -10,116 +10,12 @@ import sys
 import subprocess
 from threading import Thread
 import os
-import logging
-import rospy
 
-class SoftwearExceptionHandler(object):
-    """
-    ExceptHook override; intended to be used in conjunction with a TryExceptDecorator
-
-    Hopefully we don't cause any infinite loops here...
-    """
-    def __init__(self, shutdown):
-        self._logger = SoftwearLogger("ExceptionHandler")
-        self._logger.debug("Initialization")
-
-        self.shutdown = shutdown
-
-    def softwearExceptHook(self, exceptionType, exceptionValue, traceback):
-        """
-        @TODO Log the exception here and then choose what to do based on the exception type.
-        """
-        self._logger.error(exceptionType + ": " + exceptionValue)
-        print(tracback.print_tb())
-
-        if isinstance(exceptionType, Exception):
-            self._handle_general(exceptionValue, traceback)
-
-    def _handle_general(self):
-        self.shutdown()
-
-
-
-class SoftwearLogger(object):
-    """
-    Logging configuration for use in all projects. Basically a wrapper
-    around python logging module.
-
-    Instantiation:
-    my_logger = SoftwearLogger("my_logger")
-    my_logger.debug("This is a debug message!")
-    """
-
-    log_file = None
-    FORMAT = None
-    logger = None
-    instances = []
-
-    @classmethod
-    def initLoggingClass(cls, log_file_loc=None):
-        """
-        Method to modify log file location.
-        This should be done before any loggers are instantiated to make sure
-        everything is logged to the same place.
-        """
-        if log_file_loc:
-            cls.log_file = log_file_loc
-        else:
-            cls.log_file = str(os.path.abspath(os.curdir)) + "/default_softwear_log.log"
-
-        cls.FORMAT = '%(asctime)-15s; %(name)-8s; %(message)s'
-        logging.basicConfig(format=cls.FORMAT, filename=cls.log_file, level=logging.DEBUG)
-
-    def __init__(self, name):
-        self.name = name
-        self.logger = logging.getLogger(name)
-
-        self.instances.append(self)
-
-    def debug(self, message):
-        """
-        Log with flag = DEBUG
-        """
-        # self.d["log_level"] = "DEBUG"
-        self.logger.debug(message)
-        #self.logger.debug(message, extra=self.d)
-        rospy.logdebug(message)
-
-    def info(self, message):
-        """
-        Log with flag = INFO
-        """
-        # self.d['log_level'] = "INFO"
-        # self.logger.info(message, extra=self.d)
-        self.logger.info(message)
-        rospy.loginfo(message)
-
-    def warning(self, message):
-        """
-        Log with flag = WARNING
-        """
-        # self.d['log_level'] = "WARNING"
-        # self.logger.warning(message, extra=self.d)
-        self.logger.warning(message)
-        rospy.logwarn(message)
-
-    def error(self, message):
-        """
-        Log with flag = ERROR
-        """
-        # self.d['log_level'] = "ERROR"
-        # self.logger.error(message, extra=self.d)
-        self.logger.error(message)
-        rospy.logerr(message)
-
-    def critical(self, message):
-        """
-        Log with flag = CRITICAL
-        """
-        # self.d['log_level'] = "CRITICAL"
-        # self.logger.critical(message, extra=self.d)
-        self.logger.critical(message)
-        rospy.logfatal(message)
+# Try to import from relative path; if we're calling as main import
+if __package__:
+    from .logger import SoftwearLogger as sLogger
+else:
+    from logger import SoftwearLogger as sLogger
 
 class SoftwearThread(Thread):
     """

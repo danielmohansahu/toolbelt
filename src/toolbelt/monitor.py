@@ -12,10 +12,10 @@ import threading
 
 # Try to import from relative path; if we're calling as main import
 if __package__:
-    from .misc import SoftwearLogger as sLogger
+    from .logger import SoftwearLogger as sLogger
     from .decorators import TryExceptDecorator
 else:
-    from misc import SoftwearLogger as sLogger
+    from logger import SoftwearLogger as sLogger
     from decorators import TryExceptDecorator
 
 class SystemMonitor(object):
@@ -50,50 +50,62 @@ class SystemMonitor(object):
         self._logger.debug("Initialization.")
 
         # Topics:
-        self.topics = self._checkTopics(topics)
+        self._topics = self._checkTopics(topics)
 
         # Class variables:
-        self.frequency = 10     # Hz
-        self.active = False
+        self._frequency = 10     # Hz
+        self._active = False
         self._t = None
 
         # Check and warn if we've already instantiated a watcher
         if self.instances:
             self._logger.warning("Multiple SystemMonitors active. Undefined behavior may ensue.")
-            print("WARNING: Multiple SystemMonitors active. Undefined behavior may ensue.")
         self.instances.append(self)
 
     def isActive(self):
         """
-        Returns a boolean indicating whether or not the
+        Returns a boolean indicating whether or not the monitor is active.
         """
-        return copy.copy(self.active)
+        return self._active
+
+    def getTopics(self):
+        """
+        Returns a list of topic names.
+        """
+        return list(self._topics.keys())
 
     def setFrequency(self, desired_frequency):
         """
         Change the frequency at which the SystemMonitor checks.
         """
-        self.frequency = desired_frequency
+        self._frequency = desired_frequency
 
     def start(self):
         """
         Begin continuous monitoring of input topics.
         """
-        self.active = True
-        self._t = sThread(target=self._checkThread, daemon=True)
-        self._t.start()
+        if self._t and self._t.is_alive():
+            self._logger.warning("System Monitor 'start' called when running. Not restarting; call 'stop' then 'start' again to restart.")
+        else:
+            self._logger.info("Starting system monitor.")
+            self._active = True
+            self._t = threading.Thread(target=self._checkThread, name="systemMonitorCheckThread", daemon=True)
+            self._t.start()
 
     def stop(self):
         """
         End continuous monitoring.
         """
-        self.active = False
+        self._active = False
         if self._t and self._t.is_alive():
+            self._logger.info("Stopping system monitor.")
             self._t.join()
+        else:
+            self._logger.info("System Monitor 'stop' called when not active.")
 
         # Unlatch for next start
-        for methods in self.topics.items():
-            methods["latched"] = False
+        for key, method in self._topics.items():
+            method["latched"] = False
 
     ########################## PRIVATE METHODS ################################
 
@@ -102,8 +114,8 @@ class SystemMonitor(object):
         """
         Internal Method to check all input topics
         """
-        while self.active:
-            for topic, methods in self.topics.items():
+        while self._active:
+            for topic, methods in self._topics.items():
                 # Check if what we're monitoring has occurred:
                 if methods['check']():
                     # If we're unlatched or always triggering, trigger method:
@@ -113,14 +125,13 @@ class SystemMonitor(object):
                     methods["latched"] = True
                 else:
                     methods["latched"] = False
-            time.sleep(1.0/self.frequency)
+            time.sleep(1.0/self._frequency)
 
     def _checkTopics(self, input_topics):
         """
         Internal method to make sure we've gotten the correct inputs
         """
         def raise_failure():
-            self._logger.error("Invalid input to SystemMonitor. Please see doc.")
             raise ValueError("Invalid input to SystemMonitor. Please see doc.")
 
         if not isinstance(input_topics, dict):

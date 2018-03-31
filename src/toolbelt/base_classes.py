@@ -12,10 +12,10 @@ import copy
 
 # Try to import from relative path; if we're calling as main import
 if __package__:
-    from .misc import SoftwearLogger as sLogger
+    from .logger import SoftwearLogger as sLogger
     from .decorators import LoggingDecorator, TryExceptDecorator
 else:
-    from misc import SoftwearLogger as sLogger
+    from logger import SoftwearLogger as sLogger
     from decorators import LoggingDecorator, TryExceptDecorator
 
 # Default States defined for Actuator below:
@@ -183,7 +183,6 @@ class BaseActuator(object):
         if self.name not in [item.name for item in self.instances]:
             self.instances.append(self)
         else:
-            self._logger.error("Attempted to create a duplicate actuator with the same name.")
             raise RuntimeError("Attempted to create a duplicate actuator with the same name.")
 
     def __setitem__(self, name, value):
@@ -194,14 +193,11 @@ class BaseActuator(object):
                 value_type = type(getattr(self, name))
                 value = value_type(value)
             except ValueError as e:
-                print("Unable to set parameter; type input is wrong.")
-                self._logger.error('Unable to set parameter: ' + str(name) + " to " + str(value))
-                raise ValueError(e)
+                raise ValueError('Unable to set parameter: ' + str(name) + " to " + str(value))
 
             self._logger.info('Set parameter: ' + str(name) + " to " + str(value))
             setattr(self, name, float(value))
         else:
-            self._logger.error("Unsettable parameter specified in __setitem__")
             raise ValueError("Unsettable parameter specified in __setitem__")
 
     def __getitem__(self, name):
@@ -211,8 +207,7 @@ class BaseActuator(object):
             # modification of self._states, etc. Irrelevant for immutables.
             return copy.copy(getattr(self, name))
         else:
-            self._logger.info('Requested parameter: ' + str(name) + " does not exist.")
-            raise ValueError("Requested parameter does not exist.")
+            raise ValueError('Requested parameter: ' + str(name) + " does not exist.")
 
     ############################ SPECIAL METHODS ###############################
 
@@ -342,9 +337,8 @@ class BaseActuator(object):
         # Sanity checks:
         # Check that the desired state exists.
         if desired_state not in self['states']:
-            self._logger.error("Commanded to move to a non existant state.")
-            raise KeyError("The specified state does not exist for this \
-                            actuator. Please enter a valid state.")
+            raise KeyError("The specified state does not exist for this"
+                            + " actuator. Please enter a valid state.")
 
         # Check that the current state isn't the desired state
         # @TODO also check sensing method if given
@@ -355,19 +349,15 @@ class BaseActuator(object):
 
         if not current_state and desired_state != self['home_state'] and self['home_first']:
             # If we don't know our current state and we're required to home first:
-            self._logger.error("This actuator must be homed before a move is commanded.")
             raise RuntimeError("This actuator must be homed before a move is commanded.")
         elif current_state and self._S[desired_state]['previous_states'] and (current_state not in self._S[desired_state]['previous_states']):
             # Check the optional "previous_state" to make sure it's safe to move
-            self._logger.error("Invalid state transition: " + current_state + \
-                               " to " + desired_state)
-            raise RuntimeError("Invalid state transition: " + current_state + \
-                               " to " + desired_state)
+            raise RuntimeError("Invalid state transition: " + current_state
+                               + " to " + desired_state)
 
         # Perform safety checks: If timeout is specified wait for them to clear:
         safe_to_continue = self._check_start_condition(start_condition)
         if not safe_to_continue:
-            self._logger.error("Safety condition not satisfied.")
             raise RuntimeError("Safety condition not satisfied.")
 
         # If not blocking spin off thread:
@@ -400,8 +390,7 @@ class BaseActuator(object):
         If state is unknown go to the opposite of home state:
         """
         if len(self.states) != 2:
-            self._logger.error("Toggle undefined for more than two states.")
-            return False
+            raise RuntimeError("Toggle undefined for more than two states.")
 
         # If we don't know where we are, go to the opposite of home
         # If that move is unsafe or not allowed (i.e. home first) then
@@ -485,7 +474,6 @@ class BaseActuator(object):
                 self.current_state = new_current_state
             self._logger.info("Set state to : " + str(new_current_state))
         else:
-            self._logger.error("Tried to set current state to unreal state.")
             raise ValueError("Tried to set current state to unreal state.")
 
     @TryExceptDecorator
@@ -525,8 +513,7 @@ class BaseActuator(object):
         # If we timed out, raise a RuntimeError.
         # This doesn't really do anything if we're not blocking (which is maybe good??)
         if not success:
-            self._logger.error("Timed out during move to " + str(desired_state) + ".")
-            raise RuntimeError("Timed out waiting for sensor to trigger.")
+            raise RuntimeError("Timed out during move to " + str(desired_state) + ".")
 
         return success
 
@@ -542,7 +529,6 @@ class BaseActuator(object):
         if callable(start_condition):
             safe_to_continue = safe_to_continue and start_condition()
         else:
-            self._logger.error("Safety conditions should be callable!")
             raise ValueError("Safety conditions should be callable!")
 
         # Wait for timeout seconds.
@@ -551,7 +537,6 @@ class BaseActuator(object):
             time.sleep(0.1)
 
         if time.time() - start_time > self['safety_timeout']:
-            self._logger.error("Timed out waiting on safety conditions for move.")
             raise RuntimeError("Timed out waiting on safety conditions for move.")
 
         return safe_to_continue

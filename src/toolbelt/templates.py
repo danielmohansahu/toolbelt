@@ -10,11 +10,11 @@ import time
 
 # Try to import from relative path; if we're calling as main import
 if __package__:
-    from .misc import SoftwearLogger as sLogger
+    from .logger import SoftwearLogger as sLogger
     from .base_classes import BaseActuator
     from .decorators import TimingDecorator
 else:
-    from misc import SoftwearLogger as sLogger
+    from logger import SoftwearLogger as sLogger
     from base_classes import BaseActuator
     from decorators import TimingDecorator
 
