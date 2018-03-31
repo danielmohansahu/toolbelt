@@ -11,8 +11,3 @@ setup_args = generate_distutils_setup(
     package_dir={'': 'src'})
 
 setup(**setup_args)
-
-
-# @TODO FIND OUT HOW TO AUTOMATICALLY BUILD PACKAGE INSTEAD OF IMPORTING THROUGH toolbelt.PY
-#from setuptools import find_packages
-#packages=find_packages(),
