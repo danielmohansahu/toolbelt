@@ -10,15 +10,15 @@ import pkgutil
 import importlib
 import threading
 import rospy
+import time
 from collections import defaultdict
+import logging
 
 # Try to import from relative path; if we're calling as main import
 if __package__:
-    from .logger import SoftwearLogger as sLogger
-    from .decorators import TryExceptDecorator
+    from .decorators import TryExceptDecorator, LoggingDecorator
 else:
-    from logger import SoftwearLogger as sLogger
-    from decorators import TryExceptDecorator
+    from decorators import TryExceptDecorator, LoggingDecorator
 
 ############################ JOBCONTROL STUFF ##################################
 
@@ -32,12 +32,14 @@ class SingleOperation(object):
     """
 
     def __init__(self, operation, keepRunning, blocking=True):
-        self._logger = sLogger("SingleOperation: " + str(operation))
+        self._logger = logging.getLogger("SingleOperation_" + str(operation))
         self.operation = operation
 
         self.keepRunning = keepRunning
         self.defaultTimeout = 120
         self.blocking = blocking
+
+        self._logger.info("Initialized.")
 
     def run(self, objectToRun, inputArguments=()):
         """
@@ -51,7 +53,7 @@ class SingleOperation(object):
         if self.keepRunning.is_set():
 
             # Run method and then wait for next method to be defined.
-            self._logger.debug("Running: " + str(objectToRun) + "." + str(self.operation))
+            self._logger.info("Running: " + str(objectToRun) + "." + str(self.operation))
 
             try:
                 operationToRun = getattr(objectToRun, self.operation)
@@ -60,8 +62,10 @@ class SingleOperation(object):
                                    " has no method: " + str(self.operation))
 
             if self.blocking:
+                self._logger.info("Running operation in blocking mode...")
                 return operationToRun(*inputArguments)
             else:
+                self._logger.info("Running operation in non-blocking mode...")
                 t = threading.Thread(target=operationToRun,
                             args=inputArguments,
                             name=self.operation,
@@ -78,11 +82,10 @@ class MasterOperation(object):
     """
 
     def __init__(self, operation, keepRunning, pallet, blocking=False):
-        self._logger = sLogger("MasterOperation: " + str(operation))
-
+        self._logger = logging.getLogger("MasterOperation_" + str(operation))
         self.keepRunning = keepRunning
         self.continueEvent = threading.Event()
-        self.defaultTimeout = 120
+        self.defaultTimeout = 20
         self.blocking = blocking
         self.result = None
 
@@ -92,12 +95,15 @@ class MasterOperation(object):
         except AttributeError:
             raise RuntimeError("Failed to run. current pallet has no method: " + str(operation))
 
+        self._logger.info("Initialized.")
+
     def getGenerator(self):
         """
         Get a generator object that calls the user-defined operation and yields
         its results. After yielding it waits to continue until the continueEvent
         is set.
         """
+        self._logger.debug("Returning generator.")
         return self._jobGenerator()
 
     def getContinueEvent(self):
@@ -105,6 +111,7 @@ class MasterOperation(object):
         Get the continueEvent that triggers the generator to continue.
         See "getGenerator" for more information.
         """
+        self._logger.debug("Returning continueEvent.")
         return self.continueEvent
 
     @TryExceptDecorator
@@ -115,16 +122,31 @@ class MasterOperation(object):
         """
         # Wait until continue event is set:
         self._logger.info("Waiting for continueEvent to be set...")
-        self.continueEvent.wait(self.defaultTimeout)
+
+        # This is kinda dumb, but we don't want to keep waiting if we've exited out of the cycle
+        st = time.time()
+        while not self.continueEvent.is_set():
+            if time.time() - st > self.defaultTimeout:
+                self._logger.warning("Timed out waiting for continueEvent to be set.")
+                break
+            if not self.keepRunning.is_set():
+                self._logger.warning("keepRunning not set; exiting operation...")
+                return
+            self._logger.info("Waiting for continue event...")
+            self.continueEvent.wait(1.0)
+
         if not self.continueEvent.is_set():
             self.result = None
             self._logger.warning("Timed out waiting for continueEvent to be set.")
             return
         else:
             self.continueEvent.clear()
+            self._logger.info("continueEvent set and then cleared.")
 
         # Otherwise call operation:
+        self._logger.info("Running operation...")
         self.result = self.operationToRun()
+        self._logger.info("Finished operation...")
 
     def _jobGenerator(self):
         """
@@ -134,10 +156,12 @@ class MasterOperation(object):
         """
 
         # The first time this is called we just run the operation:
+        self._logger.info("Job generator first call.")
         self.result = self.operationToRun()
 
         # If the event is stopped during the first operation yield the result here:
         if not self.keepRunning.is_set():
+            self._logger.info("Stop continuous called.")
             yield self.result
 
         # Continuously generate next job to run:
@@ -145,6 +169,7 @@ class MasterOperation(object):
 
             # Spin off thread that waits until an event is set before getting
             # the next object to run:
+            self._logger.info("Spinning off next operation.")
             t = threading.Thread(target=self._preloadNextOperation,
                         name="preloadNextOperation",
                         daemon=True)
@@ -154,7 +179,12 @@ class MasterOperation(object):
             yield self.result
 
             # Make sure we rejoin the previous operation before continuing:
-            t.join()
+            self._logger.info("Waiting for previous operation to finish.")
+            t.join(self.defaultTimeout)
+            if t.isAlive():
+                self._logger.error("Timed out waiting for previous operation to finish.")
+            else:
+                self._logger.info("Previous operation finished.")
 
 class JobControlTemplate(object):
     """
@@ -163,9 +193,11 @@ class JobControlTemplate(object):
     In theory this should never be touched by the implementer.
     """
     def __init__(self, sc, pallet, jobCollectionsModule, CycleManager):
-        # Instantiate Logger:
-        self._logger = sLogger("JobControl")
-        self._logger.debug("Initialized.")
+        self._logger = logging.getLogger("JobControl")
+        self._logger.info("Initializing...")
+
+        # Variables:
+        self.defaultTimeout = 120
 
         # Subsystems:
         self.sc = sc
@@ -189,8 +221,11 @@ class JobControlTemplate(object):
         # Instantiate continuous cycling:
         self.cycler = CycleManager(self.pallet, self.keepRunning)
 
+        self._logger.info("Initialized.")
+
     ####################### API PASSTHROUGHS ##################################
 
+    @LoggingDecorator
     def startContinuous(self):
         """
         Start continuous cycling of the robot.
@@ -200,21 +235,32 @@ class JobControlTemplate(object):
             self.keepRunning.clear()
             raise RuntimeError("Attempted to start continuous cycling while still running.")
 
+        self._logger.info("Spinning off continuous cycling thread.")
         self.cyclerThreadHandle = threading.Thread(target=self.cycler.startContinuous,
                                           name="ContinuousCycler",
                                           daemon=True)
         self.cyclerThreadHandle.start()
 
+    @LoggingDecorator
     def stopContinuous(self):
         """
         Stop continuous cycling of the robot.
         """
+
+        self._logger.info("Stopping continuous cycling thread.")
         self.cycler.stopContinuous()
 
         # Rejoin thread (if it was actually running in the first place.)
         if self.cyclerThreadHandle:
-            self.cyclerThreadHandle.join()
+            self.cyclerThreadHandle.join(self.defaultTimeout)
 
+            # Check to make sure it died:
+            if self.cyclerThreadHandle.isAlive():
+                self._logger.info("Timed out waiting for cycler thread to finish.")
+            else:
+                self._logger.info("Rejoined cycler thread.")
+
+    @LoggingDecorator
     def testActuator(self, inputArguments):
         """
         Call the 'testActuator' method.
@@ -223,12 +269,14 @@ class JobControlTemplate(object):
             raise RuntimeError("Attempted to call testActuator while running.")
         self.cycler.testActuator(inputArguments)
 
+    @LoggingDecorator
     def debugAction(self, inputArguments):
         """
         Call the 'debugAction' method.
         """
         self.cycler.debugAction(inputArguments)
 
+    @LoggingDecorator
     def setCurrentPallet(self, palletName):
         """
         Set the current pallet that we're running.
@@ -238,6 +286,7 @@ class JobControlTemplate(object):
 
     ############################ LOADING STUFF #################################
 
+    @LoggingDecorator
     def loadJobs(self):
         """
         Walk through all subpackages in the jobCollections package.
@@ -257,6 +306,7 @@ class JobControlTemplate(object):
             # If we come across a package don't do anything (all the work is
             # done on modules)
             if ispkg and pkgname_split[-1]:
+                self._logger.debug("Ignoring package: " + str(pkgname))
                 continue
 
             # If we come across a module assume it's a job or jobset:
@@ -266,7 +316,9 @@ class JobControlTemplate(object):
                 continue
 
             # It's a jobSet (i.e. subpackage)
+            self._logger.info("Loading: " + str(pkgname))
             instance = self.loadOneJob(".".join(pkgname_split))
+            self._logger.info("Finished loading: " + str(pkgname))
 
             # Append the instance:
             if not instance:
@@ -275,14 +327,17 @@ class JobControlTemplate(object):
                 continue
             else:
                 if instance.name in self.Jobs:
-                    self.jobControlError(
-                        "Multiple jobs found with the same name : " + \
-                        str(instance.name) + ". This behavior is not supported.")
+                    raise RuntimeError(
+                        "Multiple jobs found with the same name : "
+                        + str(instance.name) + ". This behavior is not supported.")
+
                 # Finally if we satisfy all of the above, append the job:
                 self.Jobs[instance.name] = instance
+                self._logger.info("Added job: " + str(instance.name))
 
         self._logger.info("Finished loading all Jobs and JobSets")
 
+    @LoggingDecorator
     def loadOneJob(self, packageName):
         """
         Try to import the module; if it fails we assume it's some other
@@ -300,12 +355,11 @@ class JobControlTemplate(object):
             instance = getattr(mod_instance, moduleName)(self.sc)
             return instance
         except ImportError as e:
-            msg = "Failed to import module. Got an error : " + str(e)
-            self._logger.warning(msg)
-            print(msg)
+            self._logger.warning("Failed to import module. Got an error : " + str(e))
 
         return None
 
+    @LoggingDecorator
     def loadPallets(self):
         """
         Go through each loaded job and autogenerate the pallet class.
@@ -314,6 +368,8 @@ class JobControlTemplate(object):
         through all loaded jobs and adds their pallet(s) to the global Pallet
         class.
         """
+
+        self._logger.info("Loading pallets...")
 
         # Instantiate a default dictionary to add the job and pallet names:
         tempPalletNames = defaultdict(list)
@@ -326,24 +382,18 @@ class JobControlTemplate(object):
 
             # Go through pallets and define
             for jobPallet in jobPallets:
+                self._logger.info("Found pallet: " + str(jobPallet) + " for job: " + str(jobName))
                 tempPalletNames[jobPallet].append(jobName)
 
         # Add pallets to the pallet class:
         tempPallets = {}
         for palletName, jobNames in tempPalletNames.items():
             # @TODO auto define extra keys:
+            self._logger.info("Adding pallet: " + str(palletName) + " with job: " + str(jobNames))
             tempPallets[palletName] = jobNames
 
         # Add all the jobs / pallets into the pallet class:
         self.pallet.jobs = self.Jobs
         self.pallet.pallets = tempPallets
 
-    ############################ Miscellaneous ################################
-
-    def jobControlError(self, message):
-        """
-        Helper method to call logger and raise an error.
-        @TODO REMOVE
-        """
-        self._logger.error(message)
-        raise RuntimeError(message)
+        self._logger.info("Finished loading pallets.")
