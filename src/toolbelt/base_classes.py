@@ -9,13 +9,12 @@
 import threading
 import time
 import copy
+import logging
 
 # Try to import from relative path; if we're calling as main import
 if __package__:
-    from .logger import SoftwearLogger as sLogger
     from .decorators import LoggingDecorator, TryExceptDecorator
 else:
-    from logger import SoftwearLogger as sLogger
     from decorators import LoggingDecorator, TryExceptDecorator
 
 # Default States defined for Actuator below:
@@ -143,9 +142,8 @@ class BaseActuator(object):
     instances = []
 
     def __init__(self, name):
-        # Logging info:
-        self._logger = sLogger('ACTUATOR_' + name)
-        self._logger.debug("Initialization.")
+        self._logger = logging.getLogger("ACTUATOR_" + name)
+        self._logger.info("Initializing...")
 
         # Lists delineating settable and gettable attribute names.
         self._settable = ['safety_timeout',
@@ -185,7 +183,10 @@ class BaseActuator(object):
         else:
             raise RuntimeError("Attempted to create a duplicate actuator with the same name.")
 
+        self._logger.info("Initialized.")
+
     def __setitem__(self, name, value):
+        #@TODO this is unnecessary
         # Settable parameters:
         if name in self._settable:
             # Make sure we're casting it as the correct type:
@@ -201,6 +202,7 @@ class BaseActuator(object):
             raise ValueError("Unsettable parameter specified in __setitem__")
 
     def __getitem__(self, name):
+        #@TODO this is unnecessary
         # Gettable parameters
         if name in self._gettable:
             # Deliberately not returning item itself; prevent accidental
@@ -219,6 +221,7 @@ class BaseActuator(object):
         return DefaultStateDict().get_default()
 
     @classmethod
+    @LoggingDecorator
     def all_states_go(cls):
         """
         Performs a status check on all instantiated instances of the Actuator
@@ -238,6 +241,7 @@ class BaseActuator(object):
 
     ############################# BASIC METHODS ################################
 
+    @LoggingDecorator
     def add_state(self, state_name, actuate, sense=None, home_state=False, previous_states=None):
         """
         Append a new state to the class.
@@ -262,10 +266,11 @@ class BaseActuator(object):
 
         # Check whether the user has entered states properly.
         if self['initialized']:
-            self._logger.debug("System fully initialized, safe to move.")
+            self._logger.info("System fully initialized, safe to move.")
         else:
-            self._logger.debug("System not initialized; continue to add states.")
+            self._logger.info("System not initialized; continue to add states.")
 
+    @LoggingDecorator
     def is_moving(self):
         """
         Check whether our system is still moving
@@ -275,6 +280,7 @@ class BaseActuator(object):
 
         # If we don't have an active thread we assume we're stationary
         # @TODO think this through. When could this assumption be false?
+        self._logger.info("No threads active; assuming we're stationary.")
         return False
 
     @LoggingDecorator
@@ -286,7 +292,11 @@ class BaseActuator(object):
         if not self.is_moving():
             self._logger.info("Wait returned immediately. Not moving.")
             return True
-        self._t.join()
+        # Wait for join:
+        self._t.join(self.move_timeout)
+
+        if self._t.isAlive():
+            raise RuntimeError("Timed out waiting for actuator to finish move.")
 
     ########################### COMPLEX METHODS ################################
 
@@ -300,13 +310,13 @@ class BaseActuator(object):
         if not current_state:
             # We're moving or unhomed; don't know where the state is:
             # A bit funny to say things are ok, but we know we're in between states
-            self._logger.debug("Unsure of current state.")
+            self._logger.info("Unsure of current state.")
             return True
 
         # Sanity checks:
         sense = self._S[current_state]['sense']
         if not sense:
-            self._logger.debug("Unable to check current state status: no sensor.")
+            self._logger.info("Unable to check current state status: no sensor.")
             # Strange to say things are ok, but the default assumption here is
             # that we should only raise an error if we KNOW THINGS ARE WRONG
             return True
@@ -314,7 +324,7 @@ class BaseActuator(object):
         # Check that our current state sensor reading is correct.
         # If our signal is noisy this should return false.
         success = sense()
-        self._logger.debug("At expected state? : " + str(success))
+        self._logger.info("At expected state? : " + str(success))
         return success
 
     # Basic Move function:
@@ -343,8 +353,7 @@ class BaseActuator(object):
         # Check that the current state isn't the desired state
         # @TODO also check sensing method if given
         if current_state == desired_state:
-            print("Commanded to move to current state; no action taken.")
-            self._logger.info("Commanded move to current state; no action.")
+            self._logger.info("Commanded move to current state; no action taken.")
             return True
 
         if not current_state and desired_state != self['home_state'] and self['home_first']:
@@ -362,6 +371,7 @@ class BaseActuator(object):
 
         # If not blocking spin off thread:
         if not blocking:
+            self._logger.info("Non-blocking move called; spinning off move thread...")
             self._t = threading.Thread(target=self._go_to_state,
                               args=(desired_state, input_args, delay,),
                               name=self.name + "_go_to_state_" + desired_state,
@@ -369,18 +379,22 @@ class BaseActuator(object):
             self._t.start()
             return None
         else:
-            return self._go_to_state(desired_state, input_args)
+            self._logger.info("Blocking move started.")
+            success = self._go_to_state(desired_state, input_args)
+            self._logger.info("Blocking move finished.")
+            return success
 
     @LoggingDecorator
     def home(self, blocking=True, start_condition=None, delay=0.0):
         """
         Command actuator to move to its home state.
         """
-        self._logger.debug("Homing...")
+        self._logger.info("Homing called.")
         result = self.go_to_state(self['home_state'],
                                   blocking=blocking,
                                   start_condition=start_condition,
                                   delay=delay)
+        self._logger.info("Homing finished.")
         return result
 
     @LoggingDecorator
@@ -402,11 +416,13 @@ class BaseActuator(object):
 
         desired_state = self.states[0] if (self.states[0] != init_state) else self.states[1]
 
+        self._logger.info("Toggle called.")
         success = self.go_to_state(
             desired_state=desired_state,
             blocking=blocking,
             start_condition=start_condition,
             delay=delay)
+        self._logger.info("Toggle finished.")
 
         return success
 
@@ -423,6 +439,8 @@ class BaseActuator(object):
         3) Check if we have one and only one home state.
 
         """
+        self._logger.debug("Set states called.")
+
         # Create actuation plan and sanity checks
         check_dict = DefaultStateDict().get_required()
         self._S = copy.deepcopy(self.input_states)
@@ -464,6 +482,7 @@ class BaseActuator(object):
                                  Probably not fully initialized yet.")
             self.initialized = False
         else:
+            self._logger.info("Actuator initialized.")
             self.home_state = home_states[0]
             self.initialized = True
 
@@ -517,6 +536,7 @@ class BaseActuator(object):
 
         return success
 
+    @LoggingDecorator
     def _check_start_condition(self, start_condition):
         # Check safety conditions:
         safe_to_continue = True

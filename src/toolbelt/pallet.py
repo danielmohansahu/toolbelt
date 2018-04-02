@@ -6,11 +6,13 @@
  # date February, 2018
 """
 
+import logging
+
 # Try to import from relative path; if we're calling as main import
 if __package__:
-    from .logger import SoftwearLogger as sLogger
+    from .decorators import LoggingDecorator
 else:
-    from logger import SoftwearLogger as sLogger
+    from decorators import LoggingDecorator
 
 class PalletTemplate(object):
     """
@@ -46,6 +48,7 @@ class PalletTemplate(object):
     """
 
     def __init__(self, sc):
+        self._logger = logging.getLogger("Pallet")
         self.name = "Pallet"
         self.currentPallet = None
         self.sc = sc
@@ -54,11 +57,11 @@ class PalletTemplate(object):
         self.jobs = {}            # Dictionary of jobnames (keys) vs. jobInstances (values)
         self.pallets = {}           # Dictionary of pallets (keys) vs. jobNames (list)
 
-        self._logger = sLogger(self.name)
-        self._logger.debug("Initialized")
+        self._logger.info("Initialized")
 
     ######################### Helper Functions #################################
 
+    @LoggingDecorator
     def getShapeIndex(self):
         """
         Returns a dictionary of format {"shapeID" : "jobName"} for aid in piece
@@ -72,6 +75,7 @@ class PalletTemplate(object):
 
         return shapeIndex
 
+    @LoggingDecorator
     def getJobFromCurrentPallet(self, jobName):
         """
         Returns the Job object corresponding to the given jobName.
@@ -138,4 +142,4 @@ class PalletTemplate(object):
             as a string.
 
         """
-        print("getNextProduct not defined! Override with your code.")
+        self._logger.warning("getNextProduct not defined! Override with your code.")

@@ -10,12 +10,7 @@ import sys
 import subprocess
 from threading import Thread
 import os
-
-# Try to import from relative path; if we're calling as main import
-if __package__:
-    from .logger import SoftwearLogger as sLogger
-else:
-    from logger import SoftwearLogger as sLogger
+import logging
 
 class SoftwearThread(Thread):
     """

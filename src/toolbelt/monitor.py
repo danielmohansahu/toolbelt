@@ -9,14 +9,13 @@
 import time
 import copy
 import threading
+import logging
 
 # Try to import from relative path; if we're calling as main import
 if __package__:
-    from .logger import SoftwearLogger as sLogger
-    from .decorators import TryExceptDecorator
+    from .decorators import TryExceptDecorator, LoggingDecorator
 else:
-    from logger import SoftwearLogger as sLogger
-    from decorators import TryExceptDecorator
+    from decorators import TryExceptDecorator, LoggingDecorator
 
 class SystemMonitor(object):
     """
@@ -46,8 +45,8 @@ class SystemMonitor(object):
     instances = []
     def __init__(self, topics):
         # Logging info:
-        self._logger = sLogger('SystemMonitor')
-        self._logger.debug("Initialization.")
+        self._logger = logging.getLogger("SystemMonitor")
+        self._logger.info("Initialization.")
 
         # Topics:
         self._topics = self._checkTopics(topics)
@@ -62,6 +61,7 @@ class SystemMonitor(object):
             self._logger.warning("Multiple SystemMonitors active. Undefined behavior may ensue.")
         self.instances.append(self)
 
+    @LoggingDecorator
     def isActive(self):
         """
         Returns a boolean indicating whether or not the monitor is active.

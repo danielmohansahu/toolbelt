@@ -8,22 +8,17 @@
 
 import time
 import sys
-
-# Try to import from relative path; if we're calling as main import
-if __package__:
-    from .logger import SoftwearLogger as sLogger
-else:
-    from logger import SoftwearLogger as sLogger
+import logging
 
 def LoggingDecorator(originalMethod):
     """
     Decorator to log function calls:
     """
-    _logger = sLogger("LoggingDecorator")
+    logger = logging.getLogger(originalMethod.__qualname__)
     def wrap(*args, **kwargs):
-        _logger.debug("Entering: " + str(originalMethod.__qualname__))
+        logger.debug("Entering.")
         x = originalMethod(*args, **kwargs)
-        _logger.debug("Exiting: " + str(originalMethod.__qualname__))
+        logger.debug("Exiting.")
         return x
     return wrap
 
@@ -31,12 +26,11 @@ def TimingDecorator(originalMethod):
     """
     Decorator to time function calls:
     """
-    _logger = sLogger("TimingDecorator")
+    logger = logging.getLogger(originalMethod.__qualname__)
     def wrap(*args, **kwargs):
         st = time.time()
         x = originalMethod(*args, **kwargs)
-        _logger.info(str(originalMethod.__qualname__) + " took " + \
-                     str(time.time()-st) + " seconds.")
+        logger.info("Took " + str(time.time()-st) + " seconds to run.")
         return x
     return wrap
 
@@ -52,7 +46,6 @@ def TryExceptDecorator(originalMethod):
         except (KeyboardInterrupt, SystemExit):
             raise
         except:
-            print("Error caught in try/except decorator.")
             sys.excepthook(*sys.exc_info())
     return wrap
 

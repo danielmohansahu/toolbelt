@@ -7,12 +7,7 @@
 """
 
 import traceback
-
-# Try to import from relative path; if we're calling as main import
-if __package__:
-    from .logger import SoftwearLogger as sLogger
-else:
-    from logger import SoftwearLogger as sLogger
+import logging
 
 class SoftwearExceptionHandler(object):
     """
@@ -21,7 +16,7 @@ class SoftwearExceptionHandler(object):
     Hopefully we don't cause any infinite loops here...
     """
     def __init__(self, shutdown):
-        self._logger = sLogger("ExceptionHandler")
+        self._logger = logging.getLogger("SoftwearExceptionHandler")
         self._logger.debug("Initialization")
 
         self.shutdown = shutdown
@@ -31,8 +26,10 @@ class SoftwearExceptionHandler(object):
         @TODO Log the exception here and then choose what to do based on the exception type.
         """
         self._logger.error(str(exceptionType) + ": " + str(exceptionValue))
+        self._logger.error(traceback.print_tb(exceptionTraceback))
 
         print("TRACEBACK ERROR : ")
+        print(str(exceptionType) + ": " + str(exceptionValue))
         traceback.print_tb(exceptionTraceback)
 
         if isinstance(exceptionType, Exception):
