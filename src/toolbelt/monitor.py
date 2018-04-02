@@ -28,7 +28,8 @@ class SystemMonitor(object):
         'topic2_name' : {
             'check' : check_blah,
             'trigger' : do_blah,
-            'latch' : True }
+            'latch' : True,
+            'unlatch_check' : check_blegh }
     }
 
     sm = SystemMonitor(topics)
@@ -48,13 +49,14 @@ class SystemMonitor(object):
         self._logger = logging.getLogger("SystemMonitor")
         self._logger.info("Initialization.")
 
-        # Topics:
-        self._topics = self._checkTopics(topics)
-
         # Class variables:
         self._frequency = 10     # Hz
         self._active = False
         self._t = None
+        self._modify_topics_lock = threading.Lock()
+
+        # Topics:
+        self._topics = self._checkTopics(topics)
 
         # Check and warn if we've already instantiated a watcher
         if self.instances:
@@ -104,8 +106,17 @@ class SystemMonitor(object):
             self._logger.info("System Monitor 'stop' called when not active.")
 
         # Unlatch for next start
-        for key, method in self._topics.items():
-            method["latched"] = False
+        self.unlatch()
+
+    @LoggingDecorator
+    def unlatch(self, input_key=None):
+        """
+        Unlatch the specified method. If no key is specified all topics are unlatched.
+        """
+        with self._modify_topics_lock:
+            for key, method in self._topics.items():
+                if key == input_key or not input_key:
+                    method["latched"] = False
 
     ########################## PRIVATE METHODS ################################
 
@@ -114,17 +125,31 @@ class SystemMonitor(object):
         """
         Internal Method to check all input topics
         """
+        #@TODO CLEAN THIS UP
         while self._active:
             for topic, methods in self._topics.items():
                 # Check if what we're monitoring has occurred:
                 if methods['check']():
                     # If we're unlatched or always triggering, trigger method:
                     if (not methods["latch"]) or (not methods["latched"]):
-                        print(str(topic) + " detected in System Monitor.")
+                        self._logger.warning(str(topic) + " detected in System Monitor.")
                         methods['trigger']()
-                    methods["latched"] = True
+                    with self._modify_topics_lock:
+                        self._logger.info("Latching: " + topic)
+                        methods["latched"] = True
                 else:
-                    methods["latched"] = False
+                    if not methods['latch']:
+                        # Unlatch when condition is unsatisfied
+                        self._logger.info("Unlatching: " + topic)
+                        with self._modify_topics_lock:
+                            methods["latched"] = False
+                    else:
+                        # If it is latching; check unlatch condition:
+                        if methods['unlatch_check']():
+                            self._logger.info("Unlatching: " + topic)
+                            with self._modify_topics_lock:
+                                methods["latched"] = False
+
             time.sleep(1.0/self._frequency)
 
     def _checkTopics(self, input_topics):
@@ -142,9 +167,14 @@ class SystemMonitor(object):
             if (not callable(methods["check"])) or (not callable(methods["trigger"])):
                 raise_failure()
 
-            # Else populate default arguments:
-            if "latch" not in methods:
-                methods["latch"] = True
-            methods["latched"] = False
+            # Populate default arguments:
+            if "unlatch_check" not in methods:
+                methods["unlatch_check"] = lambda: False
+
+            # Populate and instantiate latch:
+            with self._modify_topics_lock:
+                if "latch" not in methods:
+                    methods["latch"] = True
+                methods["latched"] = False
 
         return input_topics
