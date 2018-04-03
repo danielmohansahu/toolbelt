@@ -25,12 +25,10 @@ class SoftwearExceptionHandler(object):
         """
         @TODO Log the exception here and then choose what to do based on the exception type.
         """
-        self._logger.error(str(exceptionType) + ": " + str(exceptionValue))
-        self._logger.error(traceback.print_tb(exceptionTraceback))
-
-        print("TRACEBACK ERROR : ")
-        print(str(exceptionType) + ": " + str(exceptionValue))
-        traceback.print_tb(exceptionTraceback)
+        #@TODO add some other handling for printing traceback info
+        self._logger.error(str(exceptionType.__name__)
+                           + ": "
+                           + str(exceptionValue))
 
         if isinstance(exceptionType, Exception):
             self._handle_general(exceptionValue, exceptionTraceback)
