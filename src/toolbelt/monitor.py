@@ -113,10 +113,9 @@ class SystemMonitor(object):
         """
         Unlatch the specified method. If no key is specified all topics are unlatched.
         """
-        with self._modify_topics_lock:
-            for key, method in self._topics.items():
-                if key == input_key or not input_key:
-                    method["latched"] = False
+        for key, method in self._topics.items():
+            if key == input_key or not input_key:
+                self._set_latch(key, False)
 
     ########################## PRIVATE METHODS ################################
 
@@ -125,30 +124,26 @@ class SystemMonitor(object):
         """
         Internal Method to check all input topics
         """
-        #@TODO CLEAN THIS UP
+        #@TODO CLEAN THIS UP. it's very unclear and potentially buggy
         while self._active:
             for topic, methods in self._topics.items():
                 # Check if what we're monitoring has occurred:
                 if methods['check']():
                     # If we're unlatched or always triggering, trigger method:
-                    if (not methods["latch"]) or (not methods["latched"]):
-                        self._logger.warning(str(topic) + " detected in System Monitor.")
+                    if not methods["latch"]:
+                        # Trigger continuously if we don't desire a latching response:
+                        self._logger.warning("Non-latching topic: " + str(topic) + " detected in System Monitor. Triggering response...")
                         methods['trigger']()
-                    with self._modify_topics_lock:
-                        self._logger.info("Latching: " + topic)
-                        methods["latched"] = True
+                    elif not methods["latched"]:
+                        # Otherwise, trigger and then latch
+                        methods['trigger']()
+                        self._set_latch(topic, True)
                 else:
-                    if not methods['latch']:
-                        # Unlatch when condition is unsatisfied
-                        self._logger.info("Unlatching: " + topic)
-                        with self._modify_topics_lock:
-                            methods["latched"] = False
-                    else:
-                        # If it is latching; check unlatch condition:
+                    # If the check criterion is not met: check if we should unlatch
+                    if methods["latch"] and methods["latched"]:
+                        # If both lat
                         if methods['unlatch_check']():
-                            self._logger.info("Unlatching: " + topic)
-                            with self._modify_topics_lock:
-                                methods["latched"] = False
+                            self._set_latch(topic, False)
 
             time.sleep(1.0/self._frequency)
 
@@ -178,3 +173,21 @@ class SystemMonitor(object):
                 methods["latched"] = False
 
         return input_topics
+
+    def _set_latch(self, key, state):
+        """
+        Modify the latched state of a given topic:
+        """
+
+        # Make sure key exists:
+        if not key in self._topics.keys():
+            raise RuntimeError("Tried to latch/unlatch non-existent state")
+
+        # Make sure state is correct:
+        if not isinstance(state, bool):
+            raise RuntimeError("State must be a boolean.")
+
+        # Modify state:
+        with self._modify_topics_lock:
+            self._logger.info("Setting latched state of: " + str(key) + " to " + str(state))
+            self._topics[key]['latched'] = state
