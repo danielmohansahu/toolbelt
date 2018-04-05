@@ -7,12 +7,7 @@
 """
 
 import logging
-
-# Try to import from relative path; if we're calling as main import
-if __package__:
-    from .decorators import LoggingDecorator
-else:
-    from decorators import LoggingDecorator
+from toolbelt.decorators import LoggingDecorator
 
 class PalletTemplate(object):
     """

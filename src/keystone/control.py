@@ -13,12 +13,7 @@ import rospy
 import time
 from collections import defaultdict
 import logging
-
-# Try to import from relative path; if we're calling as main import
-if __package__:
-    from .decorators import TryExceptDecorator, LoggingDecorator
-else:
-    from decorators import TryExceptDecorator, LoggingDecorator
+from toolbelt.decorators import TryExceptDecorator, LoggingDecorator
 
 ############################ JOBCONTROL STUFF ##################################
 
